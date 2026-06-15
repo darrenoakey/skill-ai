@@ -120,3 +120,11 @@ answer.usage             # dict — token counts etc.
 - **`google.genai` directly** — use daz-agent-sdk with Gemini provider
 - **Manual JSON parsing from AI responses** — use `schema=` with Pydantic models
 - **Manual markdown stripping** — structured output handles this automatically
+
+---
+
+## Gotchas & Known Pitfalls
+
+- **Codex image gen on a ChatGPT-account login** fails silently and falls back to spark. The codex image provider runs `codex exec -m <model>`; the SDK default `gpt-5.3-codex` is rejected on ChatGPT auth ("model is not supported when using Codex with a ChatGPT account"). Fix: set `image.codex_model: gpt-5.5` in `~/.daz-agent-sdk/config.yaml`. Always verify `result.model_used.provider == "codex"` (not `spark`).
+- **`boringstack` provider** (10.0.0.237 Ollama, hosts `qwen3.6:35b-a3b`) is a first-class provider in the SDK — use `boringstack:qwen3.6:35b-a3b` in tier chains. Tier-chain entries split on the FIRST colon, so a model id with its own colon is fine. A provider named `foo` must expose class `FooProvider`.
+- **Editable install of the SDK into a relocated venv**: if a venv's `bin/pip` shebang is stale (venv built on a different volume path), run `<venv>/bin/python -m pip install -e ~/src/daz-agent-sdk --no-deps` (the SDK declares a local-only `arbiter-client` dep that isn't on PyPI; `--no-deps` avoids the resolver failure).
