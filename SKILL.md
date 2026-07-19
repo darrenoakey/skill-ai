@@ -1,6 +1,6 @@
 ---
 name: ai
-description: daz-agent-sdk — provider-agnostic AI with tier-based routing and automatic fallback for text, structured output, agentic work, TTS, and STT. Still-image generation/editing is excluded and must use the Mac mini Codex IGS CLI.
+description: daz-agent-sdk — provider-agnostic AI for text, structured output, agentic work, TTS, STT, and programmatic still images. Use its public image API in version 0.2.17 or newer only as a client for the hardwired Mac mini IGS route; agents use the generate_image CLI.
 ---
 
 # daz-agent-sdk — Programmatic AI Integration
@@ -13,7 +13,7 @@ Provider-agnostic AI library with tier-based routing and automatic fallback acro
 
 ## When This Skill Applies
 
-Any time code needs programmatic AI: text generation, structured output, classification, summarization, agentic tool use, TTS, or STT. Still-image generation/editing is the unconditional exception: use `/Users/darrenoakey/bin/generate_image` through Mac mini IGS, never `daz_agent_sdk` image methods or providers.
+Any time code needs programmatic AI: text generation, structured output, classification, summarization, agentic tool use, TTS, STT, or still images. For programmatic still generation/editing, require `daz-agent-sdk>=0.2.17` and use its public image API. That API is only a client for the same hardwired Mac mini IGS durable queue and logged-in Codex session; image provider, model, and server selectors are disabled. Agent-facing image work uses `/Users/darrenoakey/bin/generate_image` directly.
 
 ---
 
@@ -36,7 +36,7 @@ Requires Python 3.11+.
 go get github.com/darrenoakey/daz-agent-sdk/go
 ```
 
-Full Go port with text providers and TTS/STT subprocess wrappers. Any legacy Go image API is disabled policy-wise; route still images to `/Users/darrenoakey/bin/generate_image`.
+Full Go port with text providers and TTS/STT subprocess wrappers. Use a public image API only if the installed Go SDK exposes the canonical `>=0.2.17` IGS client; otherwise route agent-facing work to `/Users/darrenoakey/bin/generate_image` and do not invent a direct provider integration.
 
 ---
 
@@ -126,7 +126,7 @@ answer.usage             # dict — token counts etc.
 ## Gotchas & Known Pitfalls
 
 - **Models asked to "return valid JSON only" still emit invalid JSON two common ways**: (1) markdown fences around the object, and (2) literal control characters (real newlines/tabs) INSIDE string values — e.g. a two-paragraph value with a real blank line in it. Strict `JSON.parse`/`json.loads` rejects (2) ("Invalid control character"), so a naive parse-or-fallback returns the raw blob and it leaks downstream (beezle3 daily digest rendered `{"commentary":...}` verbatim and narrated it into a video). Every parse of model text needs BOTH fence-stripping and a repair pass that escapes control chars found inside string literals before giving up.
-- **Still-image generation/editing is unconditionally excluded from daz-agent-sdk.** Do not configure or invoke an SDK image provider or fallback. Use `/Users/darrenoakey/bin/generate_image`, which queues work durably on Mac mini IGS for logged-in Codex. If it fails, fail closed rather than using another backend.
+- **Still images have one route.** Agents use `/Users/darrenoakey/bin/generate_image`; programmatic applications may use the public image API in `daz-agent-sdk>=0.2.17`. Both target the same hardwired Mac mini IGS durable queue and logged-in Codex session. Image provider/model/server selectors, built-in/cloud image tools, direct provider APIs, Arbiter/Spark still jobs, and all backend fallbacks are disabled. Preserve one request/job identity through service failures, rate limits, and transient faults, waiting/retrying indefinitely by default. IGS handles prompt rewrites and internal-fault repair; callers never switch backend.
 - **`boringstack` provider** (10.0.0.237 Ollama, hosts `qwen3.6:35b-a3b`) is a first-class provider in the SDK — use `boringstack:qwen3.6:35b-a3b` in tier chains. Tier-chain entries split on the FIRST colon, so a model id with its own colon is fine. A provider named `foo` must expose class `FooProvider`.
 - **Go SDK provider registration is manual**: importing `github.com/darrenoakey/daz-agent-sdk/go` alone does not register concrete providers, so `agent.Ask` can fail with "All providers in chain failed" even when config and services are healthy. Register factories from `github.com/darrenoakey/daz-agent-sdk/go/provider` before asking, and for local Ollama tiers explicitly set `cfg.Providers["ollama"]["base_url"]` to a reachable host such as `http://10.0.0.42:11434`; the Go SDK may not support Python-only providers like `arbiter`.
 - **Daemon/background Go SDK calls should pin a verified provider when fallback providers are not configured**: tier fallback can reach Gemini/OpenAI and then stop on missing API-key config even if Claude CLI auth works. For local daemons that should use subscription CLI auth, call `agent.Ask(..., sdk.WithAskProvider("claude"), sdk.WithAskModel("claude-sonnet-4-6"))` after registering the Claude provider instead of relying on the tier chain.
