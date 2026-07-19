@@ -1,6 +1,6 @@
 ---
 name: ai
-description: daz-agent-sdk — provider-agnostic AI with tier-based routing and automatic fallback. Use when building anything that needs programmatic AI (text, structured output, agentic, image, TTS, STT). NEVER use raw claude_agent_sdk or Claude API directly.
+description: daz-agent-sdk — provider-agnostic AI with tier-based routing and automatic fallback for text, structured output, agentic work, TTS, and STT. Still-image generation/editing is excluded and must use the Mac mini Codex IGS CLI.
 ---
 
 # daz-agent-sdk — Programmatic AI Integration
@@ -13,7 +13,7 @@ Provider-agnostic AI library with tier-based routing and automatic fallback acro
 
 ## When This Skill Applies
 
-Any time code needs programmatic AI: text generation, structured output, classification, summarization, agentic tool use, image generation, TTS, STT. If you see `claude_agent_sdk`, `anthropic`, `openai`, or `google.genai` used for AI queries — replace with `daz_agent_sdk`.
+Any time code needs programmatic AI: text generation, structured output, classification, summarization, agentic tool use, TTS, or STT. Still-image generation/editing is the unconditional exception: use `/Users/darrenoakey/bin/generate_image` through Mac mini IGS, never `daz_agent_sdk` image methods or providers.
 
 ---
 
@@ -36,7 +36,7 @@ Requires Python 3.11+.
 go get github.com/darrenoakey/daz-agent-sdk/go
 ```
 
-Full Go port with Ollama provider, image gen (Z-Image-Turbo via Ollama), TTS/STT subprocess wrappers. See `go/README.md` for usage.
+Full Go port with text providers and TTS/STT subprocess wrappers. Any legacy Go image API is disabled policy-wise; route still images to `/Users/darrenoakey/bin/generate_image`.
 
 ---
 
@@ -125,6 +125,13 @@ answer.usage             # dict — token counts etc.
 
 ## Gotchas & Known Pitfalls
 
-- **Codex image gen on a ChatGPT-account login** fails silently and falls back to spark. The codex image provider runs `codex exec -m <model>`; the SDK default `gpt-5.3-codex` is rejected on ChatGPT auth ("model is not supported when using Codex with a ChatGPT account"). Fix: set `image.codex_model: gpt-5.5` in `~/.daz-agent-sdk/config.yaml`. Always verify `result.model_used.provider == "codex"` (not `spark`).
+- **Models asked to "return valid JSON only" still emit invalid JSON two common ways**: (1) markdown fences around the object, and (2) literal control characters (real newlines/tabs) INSIDE string values — e.g. a two-paragraph value with a real blank line in it. Strict `JSON.parse`/`json.loads` rejects (2) ("Invalid control character"), so a naive parse-or-fallback returns the raw blob and it leaks downstream (beezle3 daily digest rendered `{"commentary":...}` verbatim and narrated it into a video). Every parse of model text needs BOTH fence-stripping and a repair pass that escapes control chars found inside string literals before giving up.
+- **Still-image generation/editing is unconditionally excluded from daz-agent-sdk.** Do not configure or invoke an SDK image provider or fallback. Use `/Users/darrenoakey/bin/generate_image`, which queues work durably on Mac mini IGS for logged-in Codex. If it fails, fail closed rather than using another backend.
 - **`boringstack` provider** (10.0.0.237 Ollama, hosts `qwen3.6:35b-a3b`) is a first-class provider in the SDK — use `boringstack:qwen3.6:35b-a3b` in tier chains. Tier-chain entries split on the FIRST colon, so a model id with its own colon is fine. A provider named `foo` must expose class `FooProvider`.
+- **Go SDK provider registration is manual**: importing `github.com/darrenoakey/daz-agent-sdk/go` alone does not register concrete providers, so `agent.Ask` can fail with "All providers in chain failed" even when config and services are healthy. Register factories from `github.com/darrenoakey/daz-agent-sdk/go/provider` before asking, and for local Ollama tiers explicitly set `cfg.Providers["ollama"]["base_url"]` to a reachable host such as `http://10.0.0.42:11434`; the Go SDK may not support Python-only providers like `arbiter`.
+- **Daemon/background Go SDK calls should pin a verified provider when fallback providers are not configured**: tier fallback can reach Gemini/OpenAI and then stop on missing API-key config even if Claude CLI auth works. For local daemons that should use subscription CLI auth, call `agent.Ask(..., sdk.WithAskProvider("claude"), sdk.WithAskModel("claude-sonnet-4-6"))` after registering the Claude provider instead of relying on the tier chain.
+- **Claude Agent SDK may run its bundled CLI instead of the installed one**: the Python SDK resolves its bundled `claude` before `PATH`, so long-running daemons that need the user's current Claude Code subscription behavior should pass `ClaudeAgentOptions(cli_path=...)` to the installed `claude` executable. Also treat `ResultMessage.is_error` as failure even when the SDK subprocess exits 0.
+- **Claude Agent SDK can emit raw `rate_limit_event` stream messages that its Python parser does not know about**: subscription CLI turns may succeed after this event, but `claude_agent_sdk` can raise `MessageParseError: Unknown message type: rate_limit_event` before yielding the final `ResultMessage`. Patch `claude_agent_sdk._internal.client.parse_message` to convert that event into a `SystemMessage` when building long-running daemon integrations.
 - **Editable install of the SDK into a relocated venv**: if a venv's `bin/pip` shebang is stale (venv built on a different volume path), run `<venv>/bin/python -m pip install -e ~/src/daz-agent-sdk --no-deps` (the SDK declares a local-only `arbiter-client` dep that isn't on PyPI; `--no-deps` avoids the resolver failure).
+- **Reasoning-mode local models (e.g. qwen3.6 thinking tier) fail long-form generation two ways that think-tag stripping does NOT catch**: (1) the entire response is the model's own planning notes (numbered, markdown-bold "1. **Analyze User Input:** - **POV/Tense:**..." restating the prompt) with NO `<think>` wrapper at all; (2) the visible answer is truncated because the thinking budget crowded it out — either drastically short (94 words vs a 1500-word target) or full-length but stopping mid-clause on a bare comma. Detect both content-wise (meta-marker/numbered-bold-header regex for (1); word-count floor + last-char-not-in-`.!?"”’)—…` for (2)) and retry: once same-tier with a reinforced instruction, then once on a non-reasoning tier, then hard-fail — never silently keep the broken text. Observed on noveliser2 write_section (src/write_section.py `_invalid_prose_reason`); regression tests must use the ACTUAL captured bad payloads.
+- **Two prompt constraints where one is a blanket ban and the other needs an exception: the ban silently wins.** A revise-prompt said "do NOT change the scene's events or alter its length" AND "weave in these missing planned beats" — the model obeyed the ban and never restored the beats (measured on real runs: beats stayed missing after every revision pass). When an instruction needs to override a general rule, state the carve-out explicitly inside the rule itself ("the ONE exception: the missing beats below MUST be added, even though the section will grow"), don't rely on the model to reconcile the contradiction.

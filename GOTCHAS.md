@@ -16,8 +16,9 @@
 - `query()` from FastAPI background thread: use `ThreadPoolExecutor` + `asyncio.run()` inside the thread.
 
 ## daz_agent_sdk
+- In v0.2.13, `agent.conversation()` accepts `provider` and `model` but not `base_url`. A provider name in `~/.daz-agent-sdk/config.yaml` is not usable unless it is registered by the installed SDK; unknown names fail at `chat.say()` with `Provider '<name>' is not available`. Route through a registered provider (for example `ollama`) whose configured endpoint matches the URL, and prove it with one real request—not only a signature test.
 - `agent.ask()` prompts saying "Visit this URL" trigger tool calls instead of text blocks → `response.text == ""`. Phrase prompts to avoid tool use.
 - Pydantic `schema=` parameter: response has `.parsed` attribute. `resp.text` may be empty — always use `resp.parsed`.
 - `schema=` with Claude provider triggers agentic tool use (file writing) which is slow. Provider now sets `max_turns>=2` automatically so the file-write tool can execute, and falls back to parsing JSON from response text. For autonomous loops or high-throughput structured output: skip `schema=`, append JSON schema instructions to the prompt manually, and parse JSON from `result.text` using `parse_json_from_llm()` from `daz_agent_sdk.types`. This is 5-10x faster and avoids the agentic overhead.
 - Claude provider now raises `AgentError(kind=INTERNAL)` on empty non-structured responses instead of returning empty string. This triggers the fallback retry system automatically.
-- `transparent=True` with spark provider (the default) submits a `background-remove` job to arbiter on spark:8400 (BiRefNet on GPU). With mflux provider, BiRefNet runs locally on CPU — avoid for batch generation (60%+ CPU). Arbiter returns result in `result.data` not `result.image`.
+- Still-image generation/editing is unconditionally disabled through daz-agent-sdk, regardless of legacy provider support. Use `/Users/darrenoakey/bin/generate_image` through Mac mini IGS. Arbiter background removal remains permitted only as non-generative processing of an existing image.

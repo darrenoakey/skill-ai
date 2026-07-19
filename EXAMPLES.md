@@ -137,41 +137,20 @@ chat.tier       # Tier — current tier
 
 ## Image Generation
 
-Delegates to local `generate_image` binary. Tier controls step count (quality vs speed).
+Still images and model-driven edits are deliberately outside daz-agent-sdk. Invoke the canonical Mac mini IGS client as a subprocess; it has no provider fallback.
 
 ```python
-from daz_agent_sdk import agent, Tier
+import subprocess
 
-# Standard image
-result = await agent.image(
-    "A sunset over mountains",
-    width=1024,
-    height=1024,
-    output="sunset.jpg",
-)
-print(result.path)  # Path to generated image
-
-# Logo with transparent background (enforces PNG, runs BiRefNet removal automatically)
-logo = await agent.image(
-    "A minimalist fox logo, cyan on white",
-    width=256,
-    height=256,
-    transparent=True,
-    output="logo.png",
-)
-
-# Fast draft (2 steps)
-draft = await agent.image("A robot", width=512, height=512, tier=Tier.LOW)
-
-# All image() parameters:
-#   prompt, width, height       — required
-#   output                      — path (temp file if omitted)
-#   tier                        — controls step count (HIGH=16, MEDIUM=8, LOW=2)
-#   transparent                 — True → PNG + background removal
-#   model, steps, image, image_strength, guidance, quantize, seed, timeout
+subprocess.run([
+    "/Users/darrenoakey/bin/generate_image",
+    "--prompt", "A sunset over mountains",
+    "--width", "1024", "--height", "1024",
+    "--output", "sunset.jpg",
+], check=True)
 ```
 
-Step counts by tier: VERY_HIGH=32, HIGH=16, MEDIUM=8, LOW=2.
+Never call `agent.image()`, configure an image provider, or fall back to Arbiter/Spark, Flux, Z-Image-Turbo, Ollama, Gemini/Nano-Banana, direct OpenAI, built-in/cloud image tools, or peer IGS.
 
 ---
 

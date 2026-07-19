@@ -99,12 +99,8 @@ providers:
   ollama:
     base_url: http://localhost:11434
 
-image:
-  model: z-image-turbo
-  tiers:
-    high:   { steps: 16 }
-    medium: { steps: 8 }
-    low:    { steps: 2 }
+# No image provider configuration is permitted. Still images and edits use
+# /Users/darrenoakey/bin/generate_image through Mac mini IGS.
 
 tts:
   voices:
